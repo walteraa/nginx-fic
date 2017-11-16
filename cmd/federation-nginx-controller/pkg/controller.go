@@ -36,7 +36,7 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
     nic.store, nic.informerController = cache.NewInformer(
         &cache.ListWatch{
           ListFunc: func(options metav1.ListOptions) (pkgruntime.Object, error){
-            return client.Extensions().Ingresses(metav1.NamespaceAll).Watch(options)
+            return client.Extensions().Ingresses(metav1.NamespaceAll).List(options)
           },
           WatchFunc: func(options metav1.ListOptions) (watch.Interface, error){
             return client.Extensions().Ingresses(metav1.NamespaceAll).Watch(options) 
@@ -46,7 +46,7 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
         resyncPeriod,
         handlers)
 
-    return &nic, nil
+    return nic, nil
 }
 
 func (nic *NGINXFedIngressController) Run(stopCh <- chan struct{}){
