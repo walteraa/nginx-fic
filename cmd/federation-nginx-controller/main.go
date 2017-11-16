@@ -5,11 +5,12 @@ import(
   "k8s.io/federation/pkg/kubefed/util"
   //fedclient "k8s.io/federation/client/clientset_generated/federation_clientset"
   //restclient "k8s.io/client-go/rest"
-//	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd"
 //  "github.com/golang/glog"
 	//"k8s.io/kubernetes/pkg/client/unversioned/clientcmd"
-  "k8s.io/nginx-fic/cmd/federation-nginx-controller/pkg"
+  "k8s.io/federation/cmd/federation-nginx-controller/pkg"
   "fmt"
+  "time"
 )
 
 
@@ -18,7 +19,7 @@ func main(){
 //  loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 //	configOverrides := &clientcmd.ConfigOverrides{}
 //  kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
-  config := util.NewAdminConfig(util.NewDefaultPathOptions())
+  config := util.NewAdminConfig(clientcmd.NewDefaultPathOptions())
   fedClientSet, err := config.FederationClientset("kfed", os.Getenv("KUBECONFIG"))
 
   controller, err := controller.NewNGINXFedIngressController(fedClientSet, 10*time.Second)
