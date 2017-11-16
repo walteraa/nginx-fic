@@ -1,2 +1,2 @@
-output
-vendor
+output/*
+vendor/*
