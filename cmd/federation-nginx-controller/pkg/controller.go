@@ -27,15 +27,6 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
       client: client,
     }
 
-/*    handlers := framework.ResourceEventHandlerFuncs{
-		    AddFunc: func(obj interface{}) {
-          glog.Infof("Ingress added")
-		    },
-		    DeleteFunc: func(obj interface{}) {
-          glog.Infof("Ingress removed")
-		    },
-	  }
-*/
 		handlers := util.NewTriggerOnAllChanges(
 			func(obj pkgruntime.Object) {
 				glog.Infof("Function handler")
