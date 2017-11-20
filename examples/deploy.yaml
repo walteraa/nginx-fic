@@ -1,0 +1,53 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-fic
+  name: nginx-fed-ingress-controller 
+  namespace: federation-system
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: nginx-fic
+      name: nginx-fed-ingress-controller 
+    spec:
+      containers:
+      - command:
+        - /federation-nginx-controller
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        - name: KUBECONFIG 
+          value: /etc/federation/controller-manager/kubeconfig
+        image: docker.io/walteraa/federated-nginx-ingress-controller:v0.0.5-alfa
+        imagePullPolicy: IfNotPresent
+        name: controller-manager
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /etc/federation/controller-manager
+          name: kfed-controller-manager-kubeconfig
+          readOnly: true
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      serviceAccount: federation-controller-manager
+      serviceAccountName: federation-controller-manager
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - name: kfed-controller-manager-kubeconfig
+        secret:
+          defaultMode: 420
+          secretName: kfed-controller-manager-kubeconfig
