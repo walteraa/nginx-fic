@@ -1,0 +1,26 @@
+events { worker_connections 1024; }
+http{
+
+  {{ range $i, $upstream := .paths }}
+
+  upstream {{ $upstream.Path}} {
+# TODO:(walteraa) change it to be a list
+        
+        {{$upstream.Backend.Server}}:{{$upstream.Backend.Port}}; 
+        #for now we are using service name, after we will use backends IPs(Services IPs)
+    
+  }
+  {{ end }} #end range
+
+  server{
+    listen 80;
+
+    {{ range $i, $upstream := .paths }}
+      location {{$upstream.Path}} {
+        proxy_pass http:/{{$upstream.Path}};
+      }
+    {{ end }} #end range
+
+  }
+}
+daemon off;
