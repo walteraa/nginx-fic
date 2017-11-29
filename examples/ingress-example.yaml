@@ -1,9 +1,14 @@
 apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
-  name: test-ingress-edit
+  name: test-ingress
   namespace: app
 spec:
-  backend:
-    serviceName: microbot
-    servicePort: 80
+  rules:
+  - host: example.com
+    http:
+      paths:
+      - path: /microbot
+        backend:
+          serviceName: microbot
+          servicePort: 80

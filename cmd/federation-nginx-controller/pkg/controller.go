@@ -15,7 +15,8 @@ import (
   kubeclientset "k8s.io/client-go/kubernetes"
 	"k8s.io/apimachinery/pkg/watch"
   "fmt"
-	"encoding/json"
+  "k8s.io/client-go/rest"
+  apiv1 "k8s.io/api/core/v1"
 )
 
 type NGINXFedIngressController struct{
@@ -26,13 +27,12 @@ type NGINXFedIngressController struct{
 }
 
 type BackendServer struct{
-	Server string
+	Servers []string
 	Port string
 }
 
 type IngressPath struct{
 	Path string
-	//TODO: (walteraa) make it being a list
 	Backend BackendServer
 }
 
@@ -49,25 +49,51 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
     handlers := &cache.ResourceEventHandlerFuncs{
         DeleteFunc: func(old interface{}){
           ingress := old.(*extensionsv1beta1.Ingress)
-          fmt.Printf("[DELETE] Ingress{ Name:%s, Namespace: %s  }",ingress.Name, ingress.Namespace)
+          err := DeleteCfg(ingress.Name)
+          if err == nil{
+             fmt.Printf("[DELETE] Ingress{ Name:%s, Namespace: %s  } deleted successfully!",ingress.Name, ingress.Namespace)
+           }else{
+              fmt.Printf("[DELETE] Error when deleting Ingress{ Name:%s, Namespace%s}",ingress.Name,ingress.Namespace)
+           }
         },
         AddFunc: func(cur interface{}){
           ingress := cur.(*extensionsv1beta1.Ingress)
           fmt.Printf("[CREATE] Ingress{ Name:%s, Namespace: %s  }",ingress.Name, ingress.Namespace)
-					b,_ := json.Marshal(ingress)
 
 					paths := ingress.Spec.Rules[0].IngressRuleValue.HTTP.Paths
 					var ingressPaths []IngressPath
 					for _, path := range paths{
-							//TODO: (walteraa) Get the Services IPs to add it here as a List
+              serviceName := path.Backend.ServiceName
+              servicePort := path.Backend.ServicePort
+              service,errsvc := client.CoreV1().Services(ingress.Namespace).Get(serviceName, metav1.GetOptions{})
 
-							ingressPaths = append(ingressPaths,IngressPath{ Path:path.Path, Backend: BackendServer{ Server: path.Backend.ServiceName, Port: path.Backend.ServicePort.String()  } })
+              backendIngresses := service.Status.LoadBalancer.Ingress
+              backend := BackendServer{Port: servicePort.String() }
+              var servers []string
+
+              for _,ingress := range backendIngresses{
+                  servers = append(servers, ingress.IP) 
+              }
+
+              backend.Servers = servers
+
+              if errsvc == nil{
+                  fmt.Printf("The path %v has the service: %v",path.Path, backend)
+              }
+							ingressPaths = append(ingressPaths,IngressPath{ Path:path.Path, Backend: backend  })
+
 					}
-					err := WriteCfg(ingress.Name, ingressPaths)
+					configMapData, err := WriteCfg(ingress.Name, ingressPaths)
 					if err != nil{
 						fmt.Printf("Error creating configuration for %s. Error: %v",ingress.Name,err)
-					}
-            fmt.Printf("NGINX configuration file created for %s Ingress",ingress.Name)
+					}else{
+            configMap,errcfg := SaveConfigMap(ingress.Namespace,ingress.Name, configMapData) 
+            if errcfg != nil{
+              fmt.Printf("NGINX configuration file created for %s Ingress(ConfigMap):\n\n %v",ingress.Name,configMap)
+            }else{
+              fmt.Printf("Error when creating NGINX configmap for %v Ingress",ingress.Name)
+            }
+          }
         },
         UpdateFunc: func(old,cur interface{}){
           newIngress := cur.(*extensionsv1beta1.Ingress)
@@ -88,7 +114,11 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
         },
         &extensionsv1beta1.Ingress{},
         controller.NoResyncPeriodFunc(),
-        handlers)
+        util.NewTriggerOnAllChanges(
+                    func(obj pkgruntime.Object){
+                      glog.Infof("Object changed: %v", obj)
+                    },
+        ))
 
     nic.ingressFederatedInformer = util.NewFederatedInformer(
         client,
@@ -105,11 +135,7 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
                 &extensionsv1beta1.Ingress{},
                 controller.NoResyncPeriodFunc(),
                 //Do something when some ingress changes(add/remove/update)
-                util.NewTriggerOnAllChanges(
-                    func(obj pkgruntime.Object){
-                      glog.Infof("Object changed: %v", obj)
-                    },
-                ))
+                handlers)
         },
 
         //Do procedures when a new cluster becomes available
@@ -124,6 +150,30 @@ func NewNGINXFedIngressController(client federationclientset.Interface, resyncPe
 
     return nic, nil
 }
+
+func SaveConfigMap(namespace,name, data string ) (*apiv1.ConfigMap, error){
+  config, err := rest.InClusterConfig()
+  if err != nil{
+    return &apiv1.ConfigMap{},err
+  }
+
+  clientset,err := kubeclientset.NewForConfig(config)
+
+  cmap := &apiv1.ConfigMap{
+    ObjectMeta: metav1.ObjectMeta{
+			Name: name + "_configmap",
+      Namespace: namespace,
+		},
+  }
+
+  cmapdata := map[string]string{}
+  cmapdata["nginx_conf"] = data
+
+  cmap.Data = cmapdata
+
+  return clientset.CoreV1().ConfigMaps(namespace).Create(cmap)
+}
+
 
 func (nic *NGINXFedIngressController) Run(stopCh <- chan struct{}){
   glog.Infof("Starting NGINX Federated Ingress Controller")
